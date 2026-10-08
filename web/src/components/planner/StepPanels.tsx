@@ -16,17 +16,24 @@ import {
   FIXED_KIND_LABELS,
   KITCHEN_ELEMENT_KINDS,
   NORTH_SIDE_LABELS,
+  ROOM_COMPONENT_KINDS,
   WASHROOM_ELEMENT_KINDS,
 } from "@/lib/types";
+import { APARTMENT_PRESETS, type ApartmentPresetId } from "@/lib/presets";
 
 type RoomStepProps = {
   room: Room;
   onRoomChange: (
     room: Pick<Room, "name" | "lengthCm" | "widthCm" | "northSide">,
   ) => void;
+  onApplyApartment: (id: ApartmentPresetId) => void;
 };
 
-export function RoomStepPanel({ room, onRoomChange }: RoomStepProps) {
+export function RoomStepPanel({
+  room,
+  onRoomChange,
+  onApplyApartment,
+}: RoomStepProps) {
   const [name, setName] = useState(room.name);
   const [roomL, setRoomL] = useState(String(room.lengthCm));
   const [roomW, setRoomW] = useState(String(room.widthCm));
@@ -54,9 +61,24 @@ export function RoomStepPanel({ room, onRoomChange }: RoomStepProps) {
       <section>
         <h2>1. Room</h2>
         <p className="panel-note">
-          Set the empty room size and which side faces north. Build elements
-          come next.
+          Start from a ready apartment layout, or set a single room size below.
+          Everything stays editable in the Build step.
         </p>
+        <h3 className="subhead">Apartment layouts</h3>
+        <div className="apartment-presets">
+          {APARTMENT_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              className="apartment-card"
+              onClick={() => onApplyApartment(preset.id)}
+            >
+              <strong>{preset.label}</strong>
+              <span>{preset.blurb}</span>
+            </button>
+          ))}
+        </div>
+        <h3 className="subhead">Room size</h3>
         <form className="form-grid" onSubmit={applyRoom}>
           <label className="full">
             Room name
@@ -109,6 +131,7 @@ export function RoomStepPanel({ room, onRoomChange }: RoomStepProps) {
 type BuildStepProps = {
   fixedObjects: FixedObject[];
   onAddFixed: (kind: FixedKind, parentId?: string) => void;
+  onDuplicateFixed: (id: string) => void;
   onAddCustom: (
     parentId: string,
     input: { name: string; lengthCm: number; widthCm: number },
@@ -124,6 +147,7 @@ type BuildStepProps = {
 export function BuildStepPanel({
   fixedObjects,
   onAddFixed,
+  onDuplicateFixed,
   onAddCustom,
   onUpdateFixed,
   onSelectFixed,
@@ -223,6 +247,13 @@ export function BuildStepPanel({
           >
             Edit
           </button>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => onDuplicateFixed(fixed.id)}
+          >
+            Duplicate
+          </button>
         </div>
       </li>
     );
@@ -233,11 +264,26 @@ export function BuildStepPanel({
       <section>
         <h2>2. Build elements</h2>
         <p className="panel-note">
-          Add a kitchen or washroom to load basic fixtures (sink, slab, taps,
-          chimney, toilet seat, washer…). Move them on the plan or add more.
+          Kitchen and washroom come with basic fixtures (sink, slab, taps,
+          chimney, toilet seat, washer…). Duplicate any of them to make your own
+          version, then edit or move it on the plan.
         </p>
 
-        <h3 className="subhead">Room structures</h3>
+        <h3 className="subhead">Room components</h3>
+        <div className="preset-chips">
+          {ROOM_COMPONENT_KINDS.map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              className="chip"
+              onClick={() => onAddFixed(kind)}
+            >
+              + {FIXED_KIND_LABELS[kind]}
+            </button>
+          ))}
+        </div>
+
+        <h3 className="subhead">Other structures</h3>
         <div className="form-grid">
           <label className="full">
             Type
@@ -429,6 +475,17 @@ export function BuildStepPanel({
   );
 }
 
+const INVENTORY_PRESETS: Omit<Thing, "id">[] = [
+  { name: "Single bed", lengthCm: 190, widthCm: 90 },
+  { name: "Double bed", lengthCm: 190, widthCm: 135 },
+  { name: "Queen bed", lengthCm: 200, widthCm: 150 },
+  { name: "King bed", lengthCm: 200, widthCm: 180 },
+  { name: "2-seater sofa", lengthCm: 150, widthCm: 85 },
+  { name: "3-seater sofa", lengthCm: 210, widthCm: 90 },
+  { name: "Steel almirah", lengthCm: 90, widthCm: 50 },
+  { name: "Wooden almirah", lengthCm: 120, widthCm: 60 },
+];
+
 type InventoryStepProps = {
   things: Thing[];
   placements: Placement[];
@@ -486,6 +543,21 @@ export function InventoryStepPanel({
           Your movable furniture and appliances only — bed, sofa, fridge you
           own. Not kitchen/washroom build fixtures.
         </p>
+        <h3 className="subhead">Quick add</h3>
+        <div className="preset-chips">
+          {INVENTORY_PRESETS.map((preset) => (
+            <button
+              key={preset.name}
+              type="button"
+              className="chip"
+              title={`${preset.lengthCm} × ${preset.widthCm} cm`}
+              onClick={() => onAddThing(preset)}
+            >
+              + {preset.name}
+            </button>
+          ))}
+        </div>
+        <h3 className="subhead">Custom item</h3>
         <form className="form-grid" onSubmit={submitThing}>
           <label className="full">
             Name

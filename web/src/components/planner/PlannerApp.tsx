@@ -25,7 +25,14 @@ import type {
   Thing,
   ViewMode,
 } from "@/lib/types";
-import { FIXED_KIND_DEFAULTS, NORTH_SIDE_LABELS, starterLayoutFor } from "@/lib/types";
+import { FIXED_KIND_DEFAULTS, NORTH_SIDE_LABELS } from "@/lib/types";
+import {
+  buildApartmentPreset,
+  createStructure,
+  duplicateStructure,
+  uid,
+  type ApartmentPresetId,
+} from "@/lib/presets";
 import dynamic from "next/dynamic";
 import { RoomCanvas } from "./RoomCanvas";
 import {
@@ -46,10 +53,6 @@ const RoomView3D = dynamic(
     ),
   },
 );
-
-function uid(prefix: string) {
-  return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
-}
 
 const STEPS: { id: PlannerStep; label: string; blurb: string }[] = [
   { id: "room", label: "1. Room", blurb: "Size + north" },
@@ -126,54 +129,53 @@ export function PlannerApp() {
   }
 
   function addFixed(kind: FixedKind, parentId?: string) {
-    const defaults = FIXED_KIND_DEFAULTS[kind];
     const parent = parentId
       ? state.fixedObjects.find((f) => f.id === parentId)
       : undefined;
-    const parentFixed = parent
-      ? parent
-      : undefined;
-
-    const mainId = uid("fixed");
-    const mainDraft: FixedObject = {
-      id: mainId,
+    const seeded = createStructure(
       kind,
-      name: defaults.name,
-      lengthCm: defaults.lengthCm,
-      widthCm: defaults.widthCm,
-      xCm: parentFixed ? parentFixed.xCm + 10 : 20,
-      yCm: parentFixed ? parentFixed.yCm + 10 : 20,
-      rotation: 0,
-      isOpen: false,
-      parentId,
-    };
-    const main = clampFixed(mainDraft, state.room);
-
-    const seeded: FixedObject[] = [main];
-    if (!parentId) {
-      for (const item of starterLayoutFor(kind)) {
-        const childDefaults = FIXED_KIND_DEFAULTS[item.kind];
-        const childDraft: FixedObject = {
-          id: uid("fixed"),
-          kind: item.kind,
-          name: childDefaults.name,
-          lengthCm: childDefaults.lengthCm,
-          widthCm: childDefaults.widthCm,
-          xCm: main.xCm + item.ox,
-          yCm: main.yCm + item.oy,
-          rotation: 0,
-          isOpen: item.kind === "washroom_door" ? false : undefined,
-          parentId: mainId,
-        };
-        seeded.push(clampFixed(childDraft, state.room));
-      }
-    }
-
+      parent ? parent.xCm + 10 : 20,
+      parent ? parent.yCm + 10 : 20,
+      state.room,
+      { parentId },
+    );
     setState((prev) => ({
       ...prev,
       fixedObjects: [...prev.fixedObjects, ...seeded],
     }));
-    setSelection({ type: "fixed", id: mainId });
+    setSelection({ type: "fixed", id: seeded[0].id });
+  }
+
+  function duplicateFixed(id: string) {
+    const copies = duplicateStructure(state.fixedObjects, id, state.room);
+    if (copies.length === 0) return;
+    setState((prev) => ({
+      ...prev,
+      fixedObjects: [...prev.fixedObjects, ...copies],
+    }));
+    setSelection({ type: "fixed", id: copies[0].id });
+  }
+
+  function applyApartment(id: ApartmentPresetId) {
+    const hasLayout =
+      state.fixedObjects.length > 0 || state.placements.length > 0;
+    if (
+      hasLayout &&
+      !window.confirm(
+        "Replace the current room and build elements with this layout? It comes furnished (beds, sofa, almirahs). Your own inventory items are kept but taken out of the room.",
+      )
+    ) {
+      return;
+    }
+    const preset = buildApartmentPreset(id);
+    setState((prev) => ({
+      ...prev,
+      room: preset.room,
+      fixedObjects: preset.fixedObjects,
+      things: [...prev.things.filter((t) => !t.preset), ...preset.things],
+      placements: preset.placements,
+    }));
+    setSelection(null);
   }
 
   function addCustomBuildElement(
@@ -438,12 +440,17 @@ export function PlannerApp() {
 
       <div className="planner-grid">
         {step === "room" && (
-          <RoomStepPanel room={state.room} onRoomChange={updateRoom} />
+          <RoomStepPanel
+            room={state.room}
+            onRoomChange={updateRoom}
+            onApplyApartment={applyApartment}
+          />
         )}
         {step === "build" && (
           <BuildStepPanel
             fixedObjects={state.fixedObjects}
             onAddFixed={addFixed}
+            onDuplicateFixed={duplicateFixed}
             onAddCustom={addCustomBuildElement}
             onUpdateFixed={updateFixed}
             onSelectFixed={(id) => setSelection({ type: "fixed", id })}
@@ -521,6 +528,12 @@ export function PlannerApp() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => duplicateFixed(selectedFixed.id)}
+                >
+                  Duplicate
+                </button>
+                <button
+                  type="button"
                   className="danger"
                   onClick={() => removeFixed(selectedFixed.id)}
                 >
@@ -568,7 +581,7 @@ export function PlannerApp() {
                 {viewMode === "3d"
                   ? "3D preview of the same room — edit layout in 2D"
                   : step === "room"
-                    ? "Set room size, then continue to Build elements"
+                    ? "Pick an apartment layout or set a single room size"
                     : step === "build"
                       ? "Add kitchen/doors and fixtures — select on plan to edit"
                       : step === "inventory"

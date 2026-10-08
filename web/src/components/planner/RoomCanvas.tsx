@@ -15,7 +15,7 @@ import type {
   Selection,
   Thing,
 } from "@/lib/types";
-import { compassLabels, type Cardinal } from "@/lib/types";
+import { compassLabels, isZone, type Cardinal } from "@/lib/types";
 
 function cardinalLabel(cardinal: Cardinal) {
   switch (cardinal) {
@@ -142,6 +142,13 @@ export function RoomCanvas({
   const canDragFixed = step === "build";
   const canDragFurniture = step === "fit";
   const directions = compassLabels(room.northSide ?? "top");
+  const orderedFixed = useMemo(
+    () => [
+      ...fixedObjects.filter((f) => isZone(f.kind)),
+      ...fixedObjects.filter((f) => !isZone(f.kind)),
+    ],
+    [fixedObjects],
+  );
 
   const scaleHint = useMemo(() => {
     const maxSide = Math.max(room.lengthCm, room.widthCm);
@@ -325,8 +332,9 @@ export function RoomCanvas({
           );
         })}
 
-        {fixedObjects.map((fixed) => {
+        {orderedFixed.map((fixed) => {
           const box = fixedFootprint(fixed);
+          const zone = isZone(fixed.kind);
           const isSelected =
             selection?.type === "fixed" && selection.id === fixed.id;
           const label =
@@ -358,22 +366,25 @@ export function RoomCanvas({
                     ? "grabbing"
                     : "grab"
                   : "pointer",
+                pointerEvents: zone && !canDragFixed ? "none" : undefined,
               }}
             >
               <rect
                 width={box.w}
                 height={box.h}
                 rx={4}
-                className={`fixed-object ${fixed.kind} ${fixed.isOpen ? "open" : ""} ${isSelected ? "selected" : ""}`}
+                className={`fixed-object ${fixed.kind} ${zone ? "zone" : ""} ${fixed.isOpen ? "open" : ""} ${isSelected ? "selected" : ""}`}
               />
-              <rect
-                width={box.w}
-                height={box.h}
-                rx={4}
-                fill="url(#fixed-hatch)"
-                opacity={0.2}
-                pointerEvents="none"
-              />
+              {!zone && (
+                <rect
+                  width={box.w}
+                  height={box.h}
+                  rx={4}
+                  fill="url(#fixed-hatch)"
+                  opacity={0.2}
+                  pointerEvents="none"
+                />
+              )}
               <BoxLabels
                 w={box.w}
                 h={box.h}

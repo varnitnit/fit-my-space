@@ -2,7 +2,7 @@
 
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import { fixedFootprint, footprintSize } from "@/lib/geometry";
+import { fixedFootprint } from "@/lib/geometry";
 import type {
   EvaluatedPlacement,
   FixedKind,
@@ -10,6 +10,14 @@ import type {
   Room,
   Thing,
 } from "@/lib/types";
+import { isZone } from "@/lib/types";
+import {
+  BalconyDeck,
+  FixtureModel,
+  HingedDoorModel,
+  hasFixtureModel,
+} from "./Fixtures3D";
+import { FurnitureModel } from "./Furniture3D";
 
 const ROOM_HEIGHT_CM = 280;
 
@@ -19,6 +27,8 @@ const FIXED_FILL: Record<FixedKind, string> = {
   balcony: "#8fbf9a",
   kitchen: "#c4a882",
   washroom: "#89a8c4",
+  bedroom: "#d9cbe6",
+  hall: "#eadfc4",
   wardrobe: "#b5a48e",
   pillar: "#7a8680",
   other: "#9aa59d",
@@ -78,6 +88,9 @@ function fixedHeight(kind: FixedKind): number {
       return 210;
     case "pillar":
       return ROOM_HEIGHT_CM;
+    case "bedroom":
+    case "hall":
+      return 1;
     default:
       return 100;
   }
@@ -165,46 +178,6 @@ function RoomShell({ room }: { room: Room }) {
   );
 }
 
-function HingedDoor({
-  fixed,
-  room,
-  onToggle,
-}: {
-  fixed: FixedObject;
-  room: Room;
-  onToggle?: () => void;
-}) {
-  const height = fixedHeight(fixed.kind);
-  const hingeX = fixed.xCm - room.lengthCm / 2;
-  const hingeZ = fixed.yCm - room.widthCm / 2;
-  const baseYaw = (-fixed.rotation * Math.PI) / 180;
-  const openYaw = fixed.isOpen ? -Math.PI / 2 : 0;
-
-  return (
-    <group position={[hingeX, 0, hingeZ]} rotation={[0, baseYaw, 0]}>
-      <group rotation={[0, openYaw, 0]}>
-        <mesh
-          position={[fixed.lengthCm / 2, height / 2, fixed.widthCm / 2]}
-          castShadow
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle?.();
-          }}
-          onPointerOver={() => {
-            document.body.style.cursor = "pointer";
-          }}
-          onPointerOut={() => {
-            document.body.style.cursor = "default";
-          }}
-        >
-          <boxGeometry args={[fixed.lengthCm, height, fixed.widthCm]} />
-          <meshStandardMaterial color={FIXED_FILL[fixed.kind]} />
-        </mesh>
-      </group>
-    </group>
-  );
-}
-
 type SceneProps = {
   room: Room;
   fixedObjects: FixedObject[];
@@ -225,7 +198,8 @@ function Scene({
   return (
     <>
       <color attach="background" args={["#eef2ef"]} />
-      <ambientLight intensity={0.75} />
+      <ambientLight intensity={0.55} />
+      <hemisphereLight args={["#ffffff", "#c9d3cc", 0.5]} />
       <directionalLight
         position={[maxDim * 0.6, ROOM_HEIGHT_CM * 1.4, maxDim * 0.4]}
         intensity={1.1}
@@ -237,13 +211,20 @@ function Scene({
       {fixedObjects.map((fixed) => {
         if (fixed.kind === "door" || fixed.kind === "balcony" || fixed.kind === "washroom_door") {
           return (
-            <HingedDoor
-              key={fixed.id}
-              fixed={fixed}
-              room={room}
-              onToggle={() => onToggleOpen?.(fixed.id)}
-            />
+            <group key={fixed.id}>
+              <HingedDoorModel
+                fixed={fixed}
+                room={room}
+                onToggle={() => onToggleOpen?.(fixed.id)}
+              />
+              {fixed.kind === "balcony" && (
+                <BalconyDeck fixed={fixed} room={room} />
+              )}
+            </group>
           );
+        }
+        if (hasFixtureModel(fixed.kind)) {
+          return <FixtureModel key={fixed.id} fixed={fixed} room={room} />;
         }
         const box = fixedFootprint(fixed);
         return (
@@ -257,7 +238,7 @@ function Scene({
             heightCm={fixedHeight(fixed.kind)}
             liftCm={fixedLift(fixed.kind)}
             color={FIXED_FILL[fixed.kind]}
-            opacity={0.92}
+            opacity={isZone(fixed.kind) ? 0.7 : 0.92}
           />
         );
       })}
@@ -265,22 +246,8 @@ function Scene({
       {evaluated.map((item) => {
         const thing = thingsById.get(item.thingId);
         if (!thing) return null;
-        const { w, h } = footprintSize(
-          thing.lengthCm,
-          thing.widthCm,
-          item.rotation,
-        );
         return (
-          <BoxMesh
-            key={item.id}
-            room={room}
-            xCm={item.xCm}
-            yCm={item.yCm}
-            w={w}
-            h={h}
-            heightCm={80}
-            color={item.status === "PASS" ? "#6fbf8e" : "#e07a7a"}
-          />
+          <FurnitureModel key={item.id} item={item} thing={thing} room={room} />
         );
       })}
 

@@ -13,6 +13,8 @@ export type FixedKind =
   | "balcony"
   | "kitchen"
   | "washroom"
+  | "bedroom"
+  | "hall"
   | "wardrobe"
   | "pillar"
   | "other"
@@ -37,6 +39,8 @@ export interface Thing {
   name: string;
   lengthCm: number;
   widthCm: number;
+  /** Added by an apartment preset; replaced when another preset is applied */
+  preset?: boolean;
 }
 
 export interface Placement {
@@ -127,7 +131,9 @@ export const FIXED_KIND_DEFAULTS: Record<
   window: { name: "Window", lengthCm: 120, widthCm: 20 },
   balcony: { name: "Balcony", lengthCm: 150, widthCm: 40 },
   kitchen: { name: "Kitchen", lengthCm: 280, widthCm: 180 },
-  washroom: { name: "Washroom", lengthCm: 180, widthCm: 150 },
+  washroom: { name: "Washroom", lengthCm: 220, widthCm: 180 },
+  bedroom: { name: "Bedroom", lengthCm: 330, widthCm: 300 },
+  hall: { name: "Hall", lengthCm: 400, widthCm: 350 },
   wardrobe: { name: "Built-in wardrobe", lengthCm: 180, widthCm: 60 },
   pillar: { name: "Pillar", lengthCm: 40, widthCm: 40 },
   other: { name: "Custom build element", lengthCm: 60, widthCm: 50 },
@@ -139,7 +145,7 @@ export const FIXED_KIND_DEFAULTS: Record<
   kitchen_slab: { name: "Slab", lengthCm: 200, widthCm: 60 },
   kitchen_tap: { name: "Tap", lengthCm: 15, widthCm: 15 },
   kitchen_washer: { name: "Washer", lengthCm: 60, widthCm: 60 },
-  washroom_toilet: { name: "Toilet seat", lengthCm: 70, widthCm: 45 },
+  washroom_toilet: { name: "Toilet seat", lengthCm: 45, widthCm: 70 },
   washroom_basin: { name: "Basin", lengthCm: 55, widthCm: 40 },
   washroom_shower: { name: "Shower", lengthCm: 90, widthCm: 90 },
   washroom_tap: { name: "Tap", lengthCm: 12, widthCm: 12 },
@@ -154,6 +160,8 @@ export const FIXED_KIND_LABELS: Record<FixedKind, string> = {
   balcony: "Balcony",
   kitchen: "Kitchen",
   washroom: "Washroom",
+  bedroom: "Bedroom",
+  hall: "Hall / living",
   wardrobe: "Built-in wardrobe",
   pillar: "Pillar",
   other: "Custom",
@@ -181,10 +189,27 @@ export const BUILD_STRUCTURE_KINDS: FixedKind[] = [
   "balcony",
   "kitchen",
   "washroom",
+  "bedroom",
+  "hall",
   "wardrobe",
   "pillar",
   "other",
 ];
+
+/** Built-in room components shown as one-click templates. */
+export const ROOM_COMPONENT_KINDS: FixedKind[] = [
+  "kitchen",
+  "washroom",
+  "bedroom",
+  "hall",
+];
+
+/** Labeled areas of a flat. Drawn under everything and never block furniture. */
+export const ZONE_KINDS: FixedKind[] = ["bedroom", "hall"];
+
+export function isZone(kind: FixedKind) {
+  return ZONE_KINDS.includes(kind);
+}
 
 export const KITCHEN_ELEMENT_KINDS: FixedKind[] = [
   "kitchen_slab",
@@ -207,12 +232,15 @@ export const WASHROOM_ELEMENT_KINDS: FixedKind[] = [
   "washroom_washer",
 ];
 
-/** Offset from parent top-left when auto-seeding a kitchen/washroom. */
-export const KITCHEN_STARTER_LAYOUT: {
+export type StarterItem = {
   kind: FixedKind;
   ox: number;
   oy: number;
-}[] = [
+  rotation?: Rotation;
+};
+
+/** Offset from parent top-left when auto-seeding a kitchen/washroom. */
+export const KITCHEN_STARTER_LAYOUT: StarterItem[] = [
   { kind: "kitchen_slab", ox: 0, oy: 0 },
   { kind: "kitchen_sink", ox: 20, oy: 5 },
   { kind: "kitchen_tap", ox: 40, oy: 0 },
@@ -222,18 +250,17 @@ export const KITCHEN_STARTER_LAYOUT: {
   { kind: "kitchen_washer", ox: 200, oy: 100 },
 ];
 
-export const WASHROOM_STARTER_LAYOUT: {
-  kind: FixedKind;
-  ox: number;
-  oy: number;
-}[] = [
-  { kind: "washroom_door", ox: 50, oy: 130 },
-  { kind: "washroom_slab", ox: 0, oy: 0 },
-  { kind: "washroom_basin", ox: 10, oy: 5 },
-  { kind: "washroom_tap", ox: 28, oy: 0 },
-  { kind: "washroom_toilet", ox: 110, oy: 20 },
-  { kind: "washroom_shower", ox: 0, oy: 55 },
-  { kind: "washroom_washer", ox: 110, oy: 80 },
+/**
+ * Fixtures sit along the top and left walls; the door is on the bottom edge
+ * with clear entry space in front of it. Mirrored top-to-bottom when the
+ * washroom's bottom edge is an outer wall.
+ */
+export const WASHROOM_STARTER_LAYOUT: StarterItem[] = [
+  { kind: "washroom_shower", ox: 0, oy: 0 },
+  { kind: "washroom_toilet", ox: 140, oy: 0 },
+  { kind: "washroom_basin", ox: 0, oy: 115, rotation: 270 },
+  { kind: "washroom_tap", ox: 0, oy: 136, rotation: 270 },
+  { kind: "washroom_door", ox: 120, oy: 160 },
 ];
 
 export function isKitchenElement(kind: FixedKind) {
@@ -256,9 +283,7 @@ export function parentStructureKind(
   return null;
 }
 
-export function starterLayoutFor(
-  kind: FixedKind,
-): { kind: FixedKind; ox: number; oy: number }[] {
+export function starterLayoutFor(kind: FixedKind): StarterItem[] {
   if (kind === "kitchen") return KITCHEN_STARTER_LAYOUT;
   if (kind === "washroom") return WASHROOM_STARTER_LAYOUT;
   return [];

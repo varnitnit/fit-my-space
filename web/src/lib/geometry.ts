@@ -8,6 +8,7 @@ import type {
   Rotation,
   Thing,
 } from "./types";
+import { isZone } from "./types";
 
 export function footprintSize(
   lengthCm: number,
@@ -195,10 +196,12 @@ export function evaluatePlacements(
   fixedObjects: FixedObject[],
 ): EvaluatedPlacement[] {
   const byId = new Map(things.map((t) => [t.id, t]));
-  const fixedBoxes = fixedObjects.map((f) => ({
-    fixed: f,
-    footprint: fixedFootprint(f),
-  }));
+  const fixedBoxes = fixedObjects
+    .filter((f) => !isZone(f.kind))
+    .map((f) => ({
+      fixed: f,
+      footprint: fixedFootprint(f),
+    }));
 
   const footprints = placements.map((p) => {
     const thing = byId.get(p.thingId);
